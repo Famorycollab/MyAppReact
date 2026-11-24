@@ -4,7 +4,6 @@ pipeline {
     environment {
         COMPOSE_PROJECT_NAME = 'myappreact'
     }
-    //récuperation du code source
 
     stages {
         stage('Checkout') {
@@ -13,61 +12,70 @@ pipeline {
                 checkout scm
             }
         }
-     // costruction des images docker
+
         stage('Build Docker Images') {
             steps {
                 echo '=== Étape 2 : Construction des images Docker ==='
                 script {
-                    if (isUnix()) {
-                        sh 'docker compose build'
-                    } else {
-                        bat 'docker compose build'
-                    }
+                    def composeCmd = getComposeCommand()
+                    runCmd("${composeCmd} build")
                 }
             }
         }
-     // lancement des conteneurs 
+
         stage('Deploy / Run Application') {
             steps {
                 echo '=== Étape 3 : Démarrage des conteneurs en arrière-plan ==='
                 script {
-                    if (isUnix()) {
-                        sh 'docker compose up -d'
-                    } else {
-                        bat 'docker compose up -d'
-                    }
+                    def composeCmd = getComposeCommand()
+                    runCmd("${composeCmd} up -d")
                 }
             }
         }
-      // verification de l'etat des services   
 
         stage('Health Check') {
             steps {
                 echo '=== Étape 4 : Vérification de l\'état des services ==='
                 script {
-                    if (isUnix()) {
-                        sh 'docker compose ps'
-                    } else {
-                        bat 'docker compose ps'
-                    }
+                    def composeCmd = getComposeCommand()
+                    runCmd("${composeCmd} ps")
                 }
             }
         }
     }
-// affichage des logs en cas d'echec 
+
     post {
         always {
             echo 'Pipeline terminé.'
         }
         failure {
             echo 'Échec du déploiement !'
-            script {
-                if (isUnix()) {
-                    sh 'docker compose logs --tail=50'
-                } else {
-                    bat 'docker compose logs --tail=50'
-                }
-            }
         }
+    }
+}
+
+def runCmd(cmd) {
+    if (isUnix()) {
+        sh cmd
+    } else {
+        bat cmd
+    }
+}
+
+def getComposeCommand() {
+    if (isUnix()) {
+        def hasPlugin = sh(script: 'docker compose version', returnStatus: true) == 0
+        return hasPlugin ? 'docker compose' : 'docker-compose'
+    } else {
+        def hasPlugin = bat(script: 'docker compose version', returnStatus: true) == 0
+        if (hasPlugin) {
+            return 'docker compose'
+        }
+        def hasCompose = bat(script: 'docker-compose version', returnStatus: true) == 0
+        if (hasCompose) {
+            return 'docker-compose'
+        }
+        // Chemin direct Docker Desktop si non présent dans le PATH du service Jenkins
+        return '"C:\\Users\\Famory Toure\\AppData\\Local\\Programs\\DockerDesktop\\resources\\bin\\docker-compose.exe"'
     }
 }
